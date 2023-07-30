@@ -5,7 +5,7 @@ The project is written for Linux and tested only on Debian. It may also be teste
 There are a few TODOs around in the files.
 
 ## building
-It is possible to build everything in `src/` into .so(s) but since the size of the program is very small, it is not required at this stage. Therefore, to build the program, you just need to run `make debug` or `make release` for respective versions.
+It is possible to build everything in `src/` into .so(s) but since the size of the program is very small, it is not required at this stage. Therefore, to build the program, you just need to run `make release`.
 
 __IMPORTANT:__ The program requires entire html to be copied into `~/.yachat/html`. It will be done if `make install` is executed.
 ## tests

@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>YAChat - main page</title>
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.0/jquery.min.js"></script>
+        <script>
+            var disable_onscroll = false;
+            // i don't remomber JS so this is messy (> <)
+            var last_message = -1;
+            var more_messages_lock = false;
+            var more_messages_counter = 0;
+            var more_messages_permanent_lock = false;
+            function requestQuit()
+            {
+                $.post({
+                    success:((j,s)=>{
+                        console.log("Quit requested by you successfully.");
+                        moreMessages();
+                    }),
+                    error:(
+                        (a)=>{
+                            console.error("Quit has not been approved");
+                        }
+                    ),
+                    data: "USER:"+document.getElementById('username_input').value+"\n/quit now",
+                    dataType: "text",
+                    url: "/cmd"
+                });
+            }
+            function moreMessages()
+            {
+                if(more_messages_lock||more_messages_permanent_lock) return;
+                more_messages_lock = true;
+                $.post({
+                    success:((j,s)=>{
+                        var split_messages = j.split(/\r\n|\r|\n/g);
+                        split_messages.forEach((el)=>{
+                            var x = el.split(/\[(.*?)\]\((.*?)\)/ig)
+                            if(x.length == 4) {
+                                var new_p = document.createElement('p');
+                                new_p.style.color = x[2];
+                                last_message = parseInt(x[1]);
+                                new_p.innerText = x[3];
+                                if(document.getElementById('scrolling_indicator').checked) {
+                                    disable_onscroll = true;
+                                    document.getElementById('output').contentDocument.body.appendChild(new_p);
+                                    scrollChatDown();
+                                    setTimeout(()=>{
+                                        disable_onscroll = false;
+                                    },100);
+                                }
+                                else document.getElementById('output').contentDocument.body.appendChild(new_p);
+                            }
+                        });
+                    }),
+                    error:(
+                        (a)=>{
+                            console.error("Error while receiving messages.",a);
+                            document.getElementById("error_output").innerText = ("Error while receiving messages. The server might be down.");
+                            more_messages_counter++;
+                            if(more_messages_counter > 10){
+                                console.error("Too many errors while receiving messages. Permanently locked. F5 to unlock.");
+                                more_messages_permanent_lock = true;
+                                $("#message_line, #send_button, #quit_button").each((i,e) =>
+                                {
+                                    if(i == 0) e.value = "Server is down and chat is locked. Refresh to update";
+                                    else e.innerText = "USE F5";
+                                    e.disabled = true;
+                                });
+                                document.getElementById('error_output').innerText = "The server is down. Refresh the page to continue.";
+                            }
+                        }
+                    ),
+                    complete:(
+                        () => {
+                            more_messages_lock = false;
+                        }
+                    ),
+                    data: "LAST:" + ((last_message>=0)?last_message.toString():""),
+                    dataType: "text",
+                    url: "/get"
+                });
+            }
+
+
+            function scrollChatDown()
+            {
+                disable_onscroll = true;
+                var o = $("#output")[0];
+                var doc = $(o.contentWindow.document);
+                var hght = doc.height();
+                doc.scrollTop(hght);
+                setTimeout(()=>{
+                    disable_onscroll = false;
+                },100);
+            }
+            function setErrorMessage(text = "") 
+            {
+                $("#error_output")[0].innerText = text;
+            }
+            $(document).on("input","#username_input",(event)=>{
+                localStorage.username = event.target.value;
+            });
+            $(document).on("input","#colour_input",(event)=>{
+                localStorage.user_colour = event.target.value;
+            });
+            $(document).on("submit","#message_sender",(event)=>{
+                var form = event.target;
+
+                // check that message is not empty
+                if(form.message.value == "") return false;
+                
+                var submission = "SEND:("+form.colour.value+")"+form.username.value+": "+form.message.value;
+                form.message.value = "";
+                $.post({
+                    success:((j,s)=>{
+                        console.log("Sent successfully");
+                        moreMessages();
+                    }),
+                    error:(
+                        (a)=>{
+                            console.error("Message has not been sent");
+                        }
+                    ),
+                    data: submission,
+                    dataType: "text",
+                    url: "send"
+                });
+                return false;
+            })
+            $(document).ready(()=>{
+                $(document).change("#scrolling_indicator",(event)=>{
+                    if(event.target.checked == true){
+                        scrollChatDown();
+                    }
+                    return false;
+                });
+                $("#scrolling_indicator")[0].checked = true;
+                $($("#output")[0].contentDocument).on("scroll",()=>{
+                    if(disable_onscroll) return;
+                    $("#scrolling_indicator")[0].checked = false;
+                })
+
+                if(typeof localStorage.username != "undefined" )
+                {
+                    $("#username_input")[0].value = localStorage.username;
+                }
+                if(typeof localStorage.user_colour != "undefined")
+                {
+                    $("#colour_input")[0].value = localStorage.user_colour;
+                }
+                else {
+                    var str = "#";
+                    for(var i = 0; i < 6; i++) {
+                        var num = Math.floor(Math.random()*16 - 0.01);
+                        if (num >= 0 && num < 10) num += 48;
+                        else if(num <= 15) num += 87;
+                        else num = 48;
+                        str += String.fromCharCode(num);
+                    }
+                    localStorage.user_colour = 
+                    $("#colour_input")[0].value = str;
+                    
+                }
+                setInterval(moreMessages,100);
+            });
+        </script>
+        <style>
+            input, button, iframe {
+                width: 100%;
+            }
+            form {
+                display: block;
+                max-width: 800px;
+                min-width: 150px;
+                width: 100%;
+                margin: 0 auto;
+            }
+            table {
+                width: 100%;
+            }
+            #output {
+                min-height: 300px;
+                max-height: 800px;
+                resize: vertical;
+            }
+        </style>
+    </head>
+    <body>
+        <form id="message_sender">
+            <table>
+                <tr>
+                    <td>
+                        <input type="text" name="username" id="username_input" placeholder="Your usename" />
+                    </td>
+                    <td>
+                        <input type="color" name="colour" id="colour_input" value="#ffffff" />
+                    </td>
+                </tr>
+                <tr>
+                    <td>
+                        <input type="checkbox" name="_scrolling_indicator" id="scrolling_indicator" form="___NONE"/>
+                    </td>
+                    <td>
+                        <span><label for="scrolling_indicator">Attach to the bottom</label></span>
+                    </td>
+                </tr>
+                <tr>
+                    <td colspan="2">
+                        <iframe id="output">Your browser is not supported. You will need one that supports iframes (HTML5 support)</iframe>
+                    </td>
+                </tr>
+                <tr>
+                    <td>
+                        <input id="message_line" type="text" name="message" placeholder="Type your message here" />
+                    </td>
+                    <td>
+                        <button form="message_sender" id="send_button" type="submit">Send!</button>
+                    </td>
+                </tr>
+                <tr>
+                    <td>
+                        <button form="___NONE" id="quit_button" onclick="requestQuit(); this.disabled = true; return false;">Request quit</button>
+                    </td>
+                    <td>
+                        
+                    </td>
+                </tr>
+                <tr>
+                    <td colspan="2">
+                        <p style="color: #f00;" id="error_output"></p>
+                    </td>
+                </tr>
+            </table>
+        </form>
+    </body>
+</html>
